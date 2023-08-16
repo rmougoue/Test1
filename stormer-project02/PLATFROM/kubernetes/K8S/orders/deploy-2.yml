@@ -1,0 +1,110 @@
+
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/created-by: retail-store-sample
+    app.kubernetes.io/type: app
+  name: orders
+  namespace: orders
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: service
+      app.kubernetes.io/instance: orders
+      app.kubernetes.io/name: orders
+  template:
+    metadata:
+      annotations:
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8080"
+        prometheus.io/scrape: "true"
+      labels:
+        app.kubernetes.io/component: service
+        app.kubernetes.io/instance: orders
+        app.kubernetes.io/name: orders
+    spec:
+      containers:
+      - env:
+        - name: JAVA_OPTS
+          value: -XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/urandom
+        - name: SPRING_DATASOURCE_WRITER_URL
+          valueFrom:
+            secretKeyRef:
+              key: url
+              name: orders-db
+        - name: SPRING_DATASOURCE_WRITER_USERNAME
+          valueFrom:
+            secretKeyRef:
+              key: username
+              name: orders-db
+        - name: SPRING_DATASOURCE_WRITER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: orders-db
+        - name: SPRING_DATASOURCE_READER_URL
+          valueFrom:
+            secretKeyRef:
+              key: url
+              name: orders-db
+        - name: SPRING_DATASOURCE_READER_USERNAME
+          valueFrom:
+            secretKeyRef:
+              key: username
+              name: orders-db
+        - name: SPRING_DATASOURCE_READER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: orders-db
+        envFrom:
+        - configMapRef:
+            name: orders
+        image: public.ecr.aws/aws-containers/retail-store-sample-orders:0.2.0
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8080
+          initialDelaySeconds: 45
+          periodSeconds: 3
+        name: orders
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8080
+          periodSeconds: 5
+          successThreshold: 3
+        resources:
+          limits:
+            memory: 512Mi
+          requests:
+            cpu: 128m
+            memory: 512Mi
+        securityContext:
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp-volume
+      securityContext:
+        fsGroup: 1000
+      serviceAccountName: orders
+      volumes:
+      - emptyDir:
+          medium: Memory
+        name: tmp-volume
+
+

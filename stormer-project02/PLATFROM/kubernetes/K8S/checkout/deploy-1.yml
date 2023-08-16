@@ -1,0 +1,69 @@
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/created-by: retail-store-sample
+    app.kubernetes.io/type: app
+  name: checkout
+  namespace: checkout
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: service
+      app.kubernetes.io/instance: checkout
+      app.kubernetes.io/name: checkout
+  template:
+    metadata:
+      annotations:
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8080"
+        prometheus.io/scrape: "true"
+      labels:
+        app.kubernetes.io/component: service
+        app.kubernetes.io/created-by: retail-store-sample
+        app.kubernetes.io/instance: checkout
+        app.kubernetes.io/name: checkout
+    spec:
+      containers:
+      - envFrom:
+        - configMapRef:
+            name: checkout
+        image: public.ecr.aws/aws-containers/retail-store-sample-checkout:0.2.0
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 3
+        name: checkout
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        resources:
+          limits:
+            memory: 256Mi
+          requests:
+            cpu: 128m
+            memory: 256Mi
+        securityContext:
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp-volume
+      securityContext:
+        fsGroup: 1000
+      serviceAccountName: checkout
+      volumes:
+      - emptyDir:
+          medium: Memory
+        name: tmp-volume

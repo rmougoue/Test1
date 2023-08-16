@@ -1,0 +1,38 @@
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/created-by: retail-store-sample
+    app.kubernetes.io/team: database
+  name: carts-dynamodb
+  namespace: carts
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: dynamodb
+      app.kubernetes.io/instance: carts
+      app.kubernetes.io/name: carts
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: dynamodb
+        app.kubernetes.io/created-by: retail-store-sample
+        app.kubernetes.io/instance: carts
+        app.kubernetes.io/name: carts
+        app.kubernetes.io/team: database
+    spec:
+      containers:
+      - image: amazon/dynamodb-local:1.13.1
+        imagePullPolicy: IfNotPresent
+        name: dynamodb
+        ports:
+        - containerPort: 8000
+          name: dynamodb
+          protocol: TCP
+---
+
+
+

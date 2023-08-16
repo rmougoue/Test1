@@ -1,0 +1,469 @@
+PATH="stormer-project02"
+
+pipeline {
+    agent {
+     label ("node1")
+            }
+  environment {
+		DOCKERHUB_CREDENTIALS=credentials('dockerhub')
+	}
+options {
+    buildDiscarder(logRotator(numToKeepStr: '20'))
+    disableConcurrentBuilds()
+    timeout (time: 60, unit: 'MINUTES')
+    timestamps()
+  }
+	
+
+    stages {
+
+        stage('Setup parameters') {
+            steps {
+                script {
+                    properties([
+                        parameters([
+                        
+
+                             string(name: 'WARNTIME',
+                             defaultValue: '0',
+                            description: '''Warning time (in minutes) before starting upgrade'''),
+                      
+
+                          string(
+                                defaultValue: 'develop',
+                                name: 'Please_leave_this_section_as_it_is',
+                                trim: true
+                            ),
+                        ])
+                    ])
+                }
+            }
+        }
+
+
+        //////////////////////////////////
+       stage('warning') {
+      steps {
+        script {
+            notifyUpgrade(currentBuild.currentResult, "WARNING")
+            sleep(time:env.WARNTIME, unit:"MINUTES")
+        }
+      }
+    }
+
+
+    stage('Login') {
+
+			steps {
+				sh 'echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin'
+			}
+		}
+
+        stage('clean env') {
+            steps {
+                sh '''
+            docker system prune -fa || true
+                '''
+            }
+        }
+
+        
+
+        stage('Test golang') {
+	      agent {
+            docker {
+              image 'golang:1.20.1'
+              args '-u 0:0'
+            }
+           }
+            steps {
+                sh '''
+            cd $WORKSPACE/stormer-project02/src/catalog/
+            go test
+                '''
+            }
+        }
+
+
+
+
+        stage('Test maven-cart') {
+	     agent {
+            docker {
+              image 'maven:3.8.7-openjdk-18'
+            }
+           }
+            steps {
+                sh '''
+            cd $WORKSPACE/stormer-project02/src/cart/
+            mvn  test  -Dmaven.test.skip=true --quiet 
+
+                '''
+            }
+        }
+
+
+        stage('Test maven-orders') {
+	      agent {
+            docker {
+              image 'maven:3.8.7-openjdk-18'
+            }
+           }
+            steps {
+                sh '''
+            cd $WORKSPACE/stormer-project02/src/orders/
+            mvn   test -Dmaven.test.skip=true --quiet 
+                '''
+            }
+        }
+
+
+        stage('Test maven-ui') {
+	      agent {
+            docker {
+              image 'maven:3.8.7-openjdk-18'
+            }
+           }
+            steps {
+                sh '''
+            cd $WORKSPACE/stormer-project02/src/ui/
+            mvn  test -Dmaven.test.skip=true --quiet 
+                '''
+            }
+        }
+
+        stage('Test maven-node') {
+	      agent {
+            docker {
+              image 'node'
+            }
+           }
+            steps {
+                sh '''
+            cd $WORKSPACE/stormer-project02/src/checkout/
+            npm install 
+                '''
+            }
+        }
+
+
+         stage('SonarQube analysis') {
+            agent {
+                docker {
+                  image 'sonarsource/sonar-scanner-cli:4.8.0'
+                }
+               }
+               environment {
+        CI = 'true'
+        scannerHome='/opt/sonar-scanner'
+    }
+            steps{
+                withSonarQubeEnv('Sonar') {
+                    sh "${scannerHome}/bin/sonar-scanner"
+                }
+            }
+        }
+
+
+
+
+
+        stage('Build golang') {
+	      agent {
+            docker {
+              image 'golang'
+              args '-u 0:0'
+            }
+           }
+            steps {
+                sh '''
+            cd $WORKSPACE/stormer-project02/src/catalog/
+            go build   -buildvcs=false
+                '''
+            }
+        }
+
+
+
+
+        stage('Build maven-cart') {
+
+            steps {
+                sh '''
+cd $WORKSPACE/stormer-project02/src/cart/
+docker run -i -v $PWD:/maven -w /maven maven:3.8.7-openjdk-18  mvn  package -Dmaven.test.skip=true --quiet  
+ ls -l
+               '''
+            }
+        }
+       
+
+
+        stage('Build maven-orders') {
+            steps {
+                sh '''
+cd $WORKSPACE/stormer-project02/src/orders/
+docker run -i -v $PWD:/maven -w /maven maven:3.8.7-openjdk-18  mvn  package -Dmaven.test.skip=true --quiet  
+'''
+            }
+        }
+
+//         stage('Build maven-orders') {
+//             steps {
+//                 sh '''
+// cd $WORKSPACE/stormer-project02/src/orders/
+// docker run -i -v $PWD:/maven -w /maven maven:3.8.7-openjdk-18  mvn   package -Dmaven.test.skip=true --quiet  
+// cd $WORKSPACE
+//                 '''
+//             }
+//         }
+
+ 
+
+
+
+stage('Build-images-ui') {
+            steps {
+                sh '''
+cd $WORKSPACE/stormer-project02/src/ui/
+docker build -t  devopseasylearning2021/ui:jenkins-$BUILD_NUMBER .
+                '''
+            }
+        }
+
+stage('Build-images-orders') {
+            steps {
+                sh '''
+cd $WORKSPACE/stormer-project02/src/orders/
+docker build  -t devopseasylearning2021/orders:jenkins-$BUILD_NUMBER .
+docker build -f Dockerfile-rabbitmq  -t devopseasylearning2021/orders-rabbitmq:jenkins-$BUILD_NUMBER .
+docker build -f Dockerfile-mysql  -t devopseasylearning2021/orders-mysql:jenkins-$BUILD_NUMBER .
+                '''
+            }
+        }
+
+stage('Build-images-checkout') {
+            steps {
+                sh '''
+cd $WORKSPACE/stormer-project02/src/checkout/
+docker build -t  devopseasylearning2021/checkout:jenkins-$BUILD_NUMBER .
+docker build -f Dockerfile-redis  -t devopseasylearning2021/checkout-redis:jenkins-$BUILD_NUMBER .
+                '''
+            }
+        }
+
+
+
+stage('Build-images-cart') {
+            steps {
+                sh '''
+cd $WORKSPACE/stormer-project02/src/cart/
+docker build -t  devopseasylearning2021/cart:jenkins-$BUILD_NUMBER .
+docker build -f Dockerfile-dynamodb -t devopseasylearning2021/cart-dynamodb:jenkins-$BUILD_NUMBER .
+                '''
+            }
+        }
+
+
+
+stage('Build-images-catalog') {
+            steps {
+                sh '''
+cd $WORKSPACE/stormer-project02/src/catalog/
+docker build -t  devopseasylearning2021/catalog:jenkins-$BUILD_NUMBER .
+docker build -f Dockerfile-mysql -t devopseasylearning2021/catalog-mysql:jenkins-$BUILD_NUMBER .
+                '''
+            }
+        }
+
+stage('Build-images-assets') {
+            steps {
+                sh '''
+cd $WORKSPACE/stormer-project02/src/assets/
+docker build -t  devopseasylearning2021/assets:jenkins-$BUILD_NUMBER .
+cd $WORKSPACE
+                '''
+            }
+        }
+
+
+
+
+
+stage('Push-ui') {
+
+            steps {
+                sh '''
+docker push   devopseasylearning2021/ui:jenkins-$BUILD_NUMBER 
+                '''
+            }
+        }
+
+stage('Push-orders') {
+
+            steps {
+                sh '''
+
+docker push    devopseasylearning2021/orders:jenkins-$BUILD_NUMBER 
+docker push    devopseasylearning2021/orders-rabbitmq:jenkins-$BUILD_NUMBER 
+docker push    devopseasylearning2021/orders-mysql:jenkins-$BUILD_NUMBER 
+                '''
+            }
+        }
+
+stage('Push-checkout') {
+
+            steps {
+                sh '''
+docker push  devopseasylearning2021/checkout:jenkins-$BUILD_NUMBER 
+docker push  devopseasylearning2021/checkout-redis:jenkins-$BUILD_NUMBER 
+                '''
+            }
+        }
+
+
+
+stage('Push-cart') {
+ 
+            steps {
+                sh '''
+docker push  devopseasylearning2021/cart:jenkins-$BUILD_NUMBER 
+docker push  devopseasylearning2021/cart-dynamodb:jenkins-$BUILD_NUMBER
+                '''
+            }
+        }
+
+
+
+stage('Push-catalog') {
+
+            steps {
+                sh '''
+docker push  devopseasylearning2021/catalog:jenkins-$BUILD_NUMBER 
+docker push  devopseasylearning2021/catalog-mysql:jenkins-$BUILD_NUMBER 
+                '''
+            }
+        }
+
+stage('Push-assets') {
+
+            steps {
+                sh '''
+docker push   devopseasylearning2021/assets:jenkins-$BUILD_NUMBER 
+                '''
+            }
+        }
+
+
+stage('helm-charts') {
+
+
+	      steps {
+	        script {
+	          withCredentials([
+	            string(credentialsId: 'Github_token', variable: 'TOKEN')
+	          ]) {
+
+	            sh '''
+                rm -rf S3-projects-charts || true 
+                git clone https://devopseasylearning:$TOKEN@github.com/devopseasylearning/S3-projects-charts.git
+                cd S3-projects-charts
+cat << EOF > dev-values.yaml
+       repository:
+         tag:   jenkins-$BUILD_NUMBER
+         assets:
+          image: devopseasylearning2021/assets
+       
+         carts:
+          image: devopseasylearning2021/cart
+       
+         cart_dynamodb:
+          image: devopseasylearning2021/cart-dynamodb
+        
+         catalog:
+          image: devopseasylearning2021/catalog
+       
+        
+         catalog_mysql:
+          image: devopseasylearning2021/catalog-mysql
+       
+         checkout:
+          image: devopseasylearning2021/checkout
+       
+         checkout_redis:
+          image: devopseasylearning2021/checkout-redis
+       
+         orders:
+          image: devopseasylearning2021/orders
+       
+         orders_mysql:
+          image: devopseasylearning2021/orders-mysql
+       
+         orders_rabbitmq:
+          image: devopseasylearning2021/orders-rabbitmq 
+       
+         ui:
+          image: devopseasylearning2021/ui
+EOF
+git config --global user.name "devopseasylearning"
+git config --global user.email "info@devopseasylearning.com"
+   cat  dev-values.yaml
+   git add -A 
+    git commit -m "Change from JENKINS" 
+    git push  https://devopseasylearning:$TOKEN@github.com/devopseasylearning/S3-projects-charts.git
+	            '''
+	          }
+
+	        }
+
+	      }
+
+	    }
+
+
+    }
+
+
+post {
+    always {
+      script {
+        notifyUpgrade(currentBuild.currentResult, "POST")
+      }
+    }
+    
+  }
+
+}
+
+
+
+def notifyUpgrade(String buildResult, String whereAt) {
+  if (Please_leave_this_section_as_it_is == 'origin/develop') {
+    channel = 'development-alerts'
+  } else {
+    channel = 'development-alerts'
+  }
+  if (buildResult == "SUCCESS") {
+    switch(whereAt) {
+      case 'WARNING':
+        slackSend(channel: channel,
+                color: "#439FE0",
+                message: "Stormer: Upgrade starting in ${env.WARNTIME} minutes @ ${env.BUILD_URL}  Application Stormer")
+        break
+    case 'STARTING':
+      slackSend(channel: channel,
+                color: "good",
+                message: "Stormer: Starting upgrade @ ${env.BUILD_URL} Application Stormer")
+      break
+    default:
+        slackSend(channel: channel,
+                color: "good",
+                message: "Stormer: Upgrade completed successfully @ ${env.BUILD_URL}  Application Stormer")
+        break
+    }
+  } else {
+    slackSend(channel: channel,
+              color: "danger",
+              message: "Stormer: Upgrade was not successful. Please investigate it immediately.  @ ${env.BUILD_URL}  Application Stormer")
+  }
+}

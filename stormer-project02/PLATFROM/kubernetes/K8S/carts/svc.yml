@@ -1,0 +1,18 @@
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: carts
+  namespace: carts
+spec:
+  ports:
+  - name: http
+    port: 80
+    protocol: TCP
+    targetPort: http
+  selector:
+    app.kubernetes.io/component: service
+    app.kubernetes.io/instance: carts
+    app.kubernetes.io/name: carts
+  type: ClusterIP

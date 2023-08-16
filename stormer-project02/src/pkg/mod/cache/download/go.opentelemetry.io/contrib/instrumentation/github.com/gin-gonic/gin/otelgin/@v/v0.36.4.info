@@ -1,0 +1,1 @@
+{"Version":"v0.36.4","Time":"2022-10-20T15:27:39Z","Origin":{"VCS":"git","URL":"https://github.com/open-telemetry/opentelemetry-go-contrib","Subdir":"instrumentation/github.com/gin-gonic/gin/otelgin","Ref":"refs/tags/instrumentation/github.com/gin-gonic/gin/otelgin/v0.36.4","Hash":"d16c3da6ee8cf4ff12a778cb66c58d2d81ccda1d"}}

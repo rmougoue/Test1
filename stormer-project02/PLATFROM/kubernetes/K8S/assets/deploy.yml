@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/created-by: retail-store-sample
+  name: assets
+  namespace: assets
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: service
+      app.kubernetes.io/instance: assets
+      app.kubernetes.io/name: assets
+  template:
+    metadata:
+      annotations:
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8080"
+        prometheus.io/scrape: "true"
+      labels:
+        app.kubernetes.io/component: service
+        app.kubernetes.io/created-by: retail-store-sample
+        app.kubernetes.io/instance: assets
+        app.kubernetes.io/name: assets
+    spec:
+      containers:
+      - envFrom:
+        - configMapRef:
+            name: assets
+        image: public.ecr.aws/aws-containers/retail-store-sample-assets:0.2.0
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          httpGet:
+            path: /health.html
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 3
+        name: assets
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        resources:
+          limits:
+            memory: 128Mi
+          requests:
+            cpu: 128m
+            memory: 128Mi
+        securityContext:
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: false
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp-volume
+      securityContext: {}
+      serviceAccountName: assets
+      volumes:
+      - emptyDir:
+          medium: Memory
+        name: tmp-volume

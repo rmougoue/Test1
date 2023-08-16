@@ -1,0 +1,1 @@
+FROM public.ecr.aws/aws-containers/retail-store-sample-cart:0.2.0
